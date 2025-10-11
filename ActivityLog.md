@@ -2,7 +2,7 @@
 
 Course Project (MLOps IE7374).
 
-### Story 1.1 – Dataset and Problem Scoping
+### Story 1.1 – Dataset and Problem Scoping 
 - Researched multiple financial text corpora (SEC 10-K/10-Q, FinQA, FinanceBench, IBM FinQA etc.).
 - Selected **Financial-Reports-SEC (Janos Audran)** as the base dataset.
 - Understood dataset schema: 200k sentences × 19 features, 0 % nulls, multi-section (0–19) layout.
