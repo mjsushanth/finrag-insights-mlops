@@ -16,7 +16,6 @@ dependencies:
   - rich
 
   # ---- Hugging Face + modeling ----
-  # Option 1 fix: pin datasets to a version that supports script-based loaders
   - datasets<4.0.0
   - huggingface_hub
   - tokenizers
@@ -38,8 +37,10 @@ dependencies:
   - jupyterlab
   - matplotlib
   - seaborn
+  - plotly              # Interactive charts (future: dashboards)
+  - ipywidgets          # Interactive notebook widgets (useful for parameter tuning)
 
-  # ---- Quality & tests (optional but recommended) ----
+  # ---- Quality & tests ----
   - pytest
   - pytest-cov
   - black
@@ -47,13 +48,40 @@ dependencies:
   - mypy
   - pre-commit
 
-  # ---- (Optional) data quality checks ----
-  # - great-expectations
+  # ---- Text analysis & NLP utilities ----
+  - nltk                # Tokenization, stopwords (useful for chunking experiments)
+  - spacy               # Advanced NLP (optional but useful for named entity recognition)
+  - wordcloud           # Word clouds for section analysis
+
+  # ---- Data quality & profiling ----
+  - tabulate            # Pretty print tables in console/notebook
+  
+  # ---- Notebook enhancements ----
+  - jupyter_contrib_nbextensions  # Useful extensions (table of contents, code folding)
+  
 
   - pip:
-      # Vector DB client if/when you spin up Qdrant via Docker (not required to start)
+      # Vector DB client
       - qdrant-client>=1.9.0
-      # Sentence-transformers (handy embedders/rerankers)
+      
+      # Sentence-transformers (embeddings + rerankers)
       - sentence-transformers>=2.7.0
-      # Prometheus client for simple metrics from FastAPI (optional)
+      
+      # Interactive tables in Jupyter
+      - itables>=1.7.0
+      
+      # Missing data visualization
+      - missingno>=0.5.2
+      
+      # Advanced profiling (optional, use sparingly on large datasets)
+      - ydata-profiling>=4.6.0
+      
+      # Prometheus metrics (future: monitoring)
       - prometheus-client>=0.20.0
+      
+      # Text preprocessing utilities
+      - textstat>=0.7.3           # Readability metrics (Flesch-Kincaid, etc.)
+      - text-unidecode>=1.3       # Unicode normalization
+      
+      # Chunking/splitting helpers
+      - langchain-text-splitters>=0.0.1  # Reusable text splitters (optional, can DIY)

@@ -1,0 +1,114 @@
+Thumbs.db
+.DS_Store
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# -----------------------------
+# Python build & caches
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+build/
+dist/
+*.lock
+.venv/
+venv/
+.env/          # dotenv files with secrets
+.env.*         # e.g., .env.dev, .env.prod
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+
+
+
+
+# -----------------------------
+# Jupyter
+# -----------------------------
+.ipynb_checkpoints/
+notebooks/**/*.ipynb           
+
+# By default ignore ALL notebooks...
+# ...then ALLOW only the ones you want in Git:
+
+!notebooks/eda_experiments.ipynb
+!notebooks/Master_EDA_Notes.ipynb
+# (↑ Edit this allow-list to your taste. Add more lines: !notebooks/<name>.ipynb)
+
+# If you keep data under notebooks/
+!notebooks/data/
+
+
+
+# -----------------------------
+# Airflow / orchestration
+# -----------------------------
+airflow.db
+airflow.cfg
+.airflow/
+logs/
+dags/__pycache__/
+plugins/__pycache__/
+
+# -----------------------------
+# Data artifacts (keep samples only)
+# -----------------------------
+# Ignore heavy data lakes; allow a samples directory + README
+data/**
+!data/README.md
+!data/samples/**
+
+# Common file types inside notebooks or scratch
+**/*.parquet
+**/*.feather
+**/*.arrow
+**/*.pq
+**/*.jsonl
+**/*.jsonl.gz
+**/*.ndjson
+**/*.orc
+
+# CSVs can be large; keep only samples
+data/**/*.csv
+!data/samples/**/*.csv
+
+data/exports/
+data/hf_cache/
+
+# -----------------------------
+# Results / experiments
+# -----------------------------
+# results/**
+# results - eda, research/**
+
+# -----------------------------
+# Models / checkpoints
+# -----------------------------
+model/**
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# -----------------------------
+# Repo housekeeping
+# -----------------------------
+# Keep empty dirs (place a .keep file if you want the folder in Git)
+*.tmp
+*.bak
+*.swp
+*.log
+
