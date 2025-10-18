@@ -72,8 +72,12 @@ plugins/__pycache__/
 # -----------------------------
 # Ignore heavy data lakes; allow a samples directory + README
 data/**
+
 !data/README.md
 !data/samples/**
+
+# Uploading the Small Full Paruquet. 
+!data/exports/sec_filings_small_full.parquet
 
 # Common file types inside notebooks or scratch
 **/*.parquet
@@ -97,6 +101,13 @@ data/hf_cache/
 # -----------------------------
 # results/**
 # results - eda, research/**
+
+# -----------------------------
+# Database - DuckDB related.
+# -----------------------------
+
+duckdb-finsight-data/sampler.duckdb
+.duckdb
 
 # -----------------------------
 # Models / checkpoints
