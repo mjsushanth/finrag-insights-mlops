@@ -1,7 +1,5 @@
 
 
-
-
 -- ============================================================================
 -- SECTION E: FINAL VALIDATION & SUMMARY
 -- ============================================================================
@@ -10,6 +8,7 @@ SELECT
     '═════════════════════════════════════════' as separator,
     'SECTION E: FINAL VALIDATION' as status;
 
+SELECT * FROM sample_1m_finrag;
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- V1: Overall statistics
@@ -227,5 +226,67 @@ FROM summary_stats;
 
 
 
+
+-- ============================================================================
+-- ADD SECTION_NAME COLUMN TO EXISTING TABLE
+-- Simple enrichment via LEFT JOIN to dimension table
+-- ============================================================================
+
+-- Step 1: Add the new column
+ALTER TABLE sample_1m_finrag 
+ADD COLUMN section_name VARCHAR;
+
+SELECT 'Column added successfully' as status;
+
+
+-- Step 2: Populate it with a LEFT JOIN to dimension table
+UPDATE sample_1m_finrag
+SET section_name = (
+    SELECT ds.section_name
+    FROM sampler.main.dim_sec_sections ds
+    WHERE CAST(sample_1m_finrag.section AS DOUBLE) = ds.section_id
+);
+
+SELECT 'Section names populated' as status;
+
+
+-- ============================================================================
+-- Step 3: Validation - Check the results
+-- ============================================================================
+
+SELECT 
+    section,
+    section_name,
+    COUNT(*) as n_sentences,
+    COUNT(DISTINCT cik_int) as n_companies
+FROM sample_1m_finrag
+GROUP BY section, section_name
+ORDER BY section;
+
+
+-- Step 4: Check for any nulls (unmapped sections)
+SELECT 
+    'NULL CHECK' as validation,
+    COUNT(*) as total_rows,
+    COUNT(section_name) as populated_rows,
+    COUNT(*) - COUNT(section_name) as null_rows,
+    CASE 
+        WHEN COUNT(*) = COUNT(section_name) THEN '✓ All sections mapped'
+        ELSE '⚠️ Some sections unmapped'
+    END as status
+FROM sample_1m_finrag;
+
+
+-- Step 5: Preview enriched data
+SELECT 
+    cik_int,
+    name,
+    section,
+    section_name,
+    report_year,
+    sentence[1:120] as sentence_preview
+FROM sample_1m_finrag
+WHERE likely_kpi = true
+LIMIT 20;
 
 

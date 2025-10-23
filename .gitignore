@@ -25,12 +25,17 @@ dist/
 venv/
 .env/          # dotenv files with secrets
 .env.*         # e.g., .env.dev, .env.prod
+
+
+.secrets
 .python-version
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
 .coverage*
 htmlcov/
+
+
 
 # -----------------------------
 # virtual environments
@@ -43,17 +48,20 @@ env/
 # Jupyter
 # -----------------------------
 .ipynb_checkpoints/
-notebooks/**/*.ipynb           
+
+notebooks/kpi_outputs/
+notebooks/apikey_encrypt.ipynb
 
 # By default ignore ALL notebooks...
-# ...then ALLOW only the ones you want in Git:
+# notebooks/**/*.ipynb           
 
+# ...then ALLOW only the ones you want in Git:
 !notebooks/eda_experiments.ipynb
 !notebooks/Master_EDA_Notes.ipynb
 # (↑ Edit this allow-list to your taste. Add more lines: !notebooks/<name>.ipynb)
 
 # If you keep data under notebooks/
-!notebooks/data/
+notebooks/data/
 
 
 

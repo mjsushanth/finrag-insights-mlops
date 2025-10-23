@@ -84,4 +84,12 @@ HAVING
     - Regional banks and representation of small cap banks, declining struggling companies, companies with long history but very low sentences, subprime mortgage, controversial companies, Reputational risk companies, messy disclosure companies, gambling industry, etc.
 
 
+### Post-Sampling:
+- Each stratum's allocation is rounded to nearest integer.
+- Example: Stratum with 8 sentences, 25.47% rate → 8 × 0.2547 = 2.04 → rounds to 2
+- Accumulated across 15,000 strata: +2,000-2,500 sentences.
+    ```sql
+    GREATEST(1, CAST(ROUND(stratum_size * rate) AS INTEGER))
+    ```
+- ~0.35% or 1% overage. Total sentences will be 1.003 or 1.005M instead of 1M. Negligible impact. 
 

@@ -7,6 +7,19 @@
 We plan to make use of DuckDB for data sampling and extended data exploration (Most of the data exploration is with Polars.)
 Goal: DBeaver + DuckDB (file-backed DB).
 
+### Repository Structure:
+📦duckdb-finsight-data
+ ┣ 📂manual_exports
+ ┃ ┣ 📜(manual, EDA, analysis xlsx files.)
+ ┣ 📂sql
+ ┃ ┣ 📜00_pragmas.sql .. and 25+ files.
+ ┣ 📂sql-python wrapper
+ ┃ ┗ 📜sample.py
+ ┣ 📜DuckDB_EDA_LargeData.md    
+ ┣ 📜DuckDB_README.md
+ ┣ 📜DuckDB_Sampling_Strat.md
+ ┗ 📜sampler.duckdb
+
 
 ### Features: Production-grade stratified sampling pipeline with DuckDB SQL.
 - Integrated three heterogeneous sources: S&P 500 ETF holdings (Excel), SEC CIK mappings (JSON), and 71.8M-sentence corpus (Parquet).
