@@ -3,6 +3,9 @@
 #### Course Project (MLOps IE7374).
 #### Author and Activity Owner: Joel Markapudi.
 
+### Story 1 Summary:
+#### Research multiple financial text corpora (SEC 10-K/10-Q, FinQA, FinanceBench), Document data hierarchy (cik → docID → section → sentence) and defined core business problem: automated extraction + explanation of KPIs. Produced finalized project scoping document & main excel **design_docs\Finance RAG - HLD Draft v1.1.xlsx**.
+
 ### Story 1.1 – Dataset and Problem Scoping 
 - Researched multiple financial text corpora (SEC 10-K/10-Q, FinQA, FinanceBench, IBM FinQA etc.).
 - Selected **Financial-Reports-SEC (Janos Audran)** as the base dataset.
@@ -22,6 +25,11 @@
 - Achieved ~30× compression; verified schema integrity via `pyarrow.dataset` validation.
 - Created reproducible data paths under  
   `data/exports/sec_filings_small_full.parquet` and `...large_full.parquet`.
+
+
+### Story 3 Summary:
+#### Advanced Analytical Tasks: EDA across 200k sentences + EDA across 71.8M sentences. Analysis using Polars/DuckDB, Quantifying temporal coverage, Implemented TF-IDF n-gram analysis for section-specific vocabularies, numeric density (currency, %, YoY patterns), duplication estimates (SimHash) on sentences, produced **Master EDA Notes.pdf**.
+
 
 ### Story 3.1 – Core Data Profiling
 - Verified all 19 columns, data types, uniqueness, null % = 0.
@@ -43,7 +51,7 @@
 - Defined **section-wise KPI priorities**, **chunk size rules**, and **retrieval routing logic**. (Potential to change.)
 - Cross-verified findings with auxiliary analysis (Deep Analysis Addendum).
 - Finalized **EDA Synthesis → Algorithmic Design Shift** memo for model dev planning.
-
+- EDA driven interpretation:  token distribution statistics (mean: 26 tokens, p95: 55 tokens), section-wise KPI priorities, and chunk size recommendations (3-5 sentences ≈ 75-130 tokens) 
 
 
 ### Story 4 Summary:
@@ -78,7 +86,7 @@
 
 
 ### Story 5.1 – LLM-Based KPI Extraction: Architecture Evaluation & Iteration
-#### Summary: These attempts proved 'code success' but incredible inefficient due to usage of CUDA-pytorch on 16GB RTX Nvidia GPU. (too many hours for generation.) Many other llama-cpp attempts took days and some were broken code layers. 
+#### Summary: These attempts proved 'concept, code success' but incredible inefficient due to usage of CUDA-pytorch on 16GB RTX Nvidia GPU. (too many hours for generation.) Many other llama-cpp attempts took days and some were broken code layers. 
 
 #### Ollama-Based Prototyping & Initial Transformer Experiments
 - Deployed **Ollama inference runtime** for local LLM experimentation; tested Qwen2.5-3B on 7 SEC 10-K sample sentences
