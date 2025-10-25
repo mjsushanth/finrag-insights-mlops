@@ -3,11 +3,6 @@
 -- Date: October, 2025
 -- ============================================================================
 
-
-SELECT ticker, spy_company_name, cik, sec_company_name, weight_pct
-FROM sp500_with_ciks
-
-
 -- ============================================================================
 -- Exploration/EDA:
 -- ============================================================================
@@ -15,6 +10,10 @@ FROM sp500_with_ciks
 -- FROM read_parquet(parquet_path()) -- access pattern so far. 
 -- Candidate pool for notable additions
 -- Initial Exploration CTE QUERY:
+
+
+
+
 
 WITH sp500_ciks AS (
   SELECT DISTINCT CAST(cik AS VARCHAR) as cik FROM sp500_with_ciks

@@ -428,6 +428,308 @@ ORDER BY report_year;
 
 
 ------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------
+
+
+-- ============================================================================
+-- DATA VOLUME ANALYSIS: Full Dataset Processing is Impractical
+-- ============================================================================
+
+SET VARIABLE parquet_path = 'D:/JoelDesktop folds_24/NEU FALL2025/MLops IE7374 Project/finrag-insights-mlops/data/exports/sec_filings_large_full.parquet';
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- QUERY 1: Overall Dataset Scale (The "Big Picture" Problem)
+-- ══════════════════════════════════════════════════════════════════════════
+
+WITH full_corpus AS (
+    SELECT 
+        cik,
+        CAST(cik AS INTEGER) as cik_int,
+        sentenceID,
+        docID,
+        reportDate,
+        YEAR(CAST(reportDate AS DATE)) as report_year,
+        section,
+        sentence
+    FROM read_parquet(getvariable('parquet_path'))
+    WHERE YEAR(CAST(reportDate AS DATE)) BETWEEN 2006 AND 2020
+)
+SELECT 
+    '═══ FULL DATASET SCALE ═══' as analysis_type,
+    COUNT(*) as total_sentences,
+    COUNT(DISTINCT sentenceID) as unique_sentences,
+    COUNT(DISTINCT cik_int) as total_companies,
+    COUNT(DISTINCT docID) as total_filings,
+    COUNT(DISTINCT report_year) as years_covered,
+    
+    -- Processing implications
+    ROUND(COUNT(*) / 1000000.0, 2) || 'M sentences' as volume_millions,
+    ROUND(COUNT(*) * 0.5 / 1024.0, 2) || ' GB' as est_memory_needed,
+    ROUND(COUNT(*) / 10000.0, 1) || ' hours @ 10k/hr' as est_processing_time,
+    
+    '⚠️ UNMANAGEABLE for single machine' as verdict
+FROM full_corpus;
+
+
+--#,analysis_type,total_sentences,unique_sentences,total_companies,total_filings,years_covered,volume_millions,est_memory_needed,est_processing_time,verdict
+--1,═══ FULL DATASET SCALE ═══,"61,861,067","61,861,067","4,659","43,785",15,61.86M sentences,30205.6 GB,6186.1 hours @ 10k/hr,⚠️ UNMANAGEABLE for single machine
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- QUERY 2 (UPDATED): Temporal Density Analysis - 5 Bins (1993-2020)
+-- ══════════════════════════════════════════════════════════════════════════
+
+
+WITH full_corpus_binned AS (
+    SELECT 
+        CAST(cik AS INTEGER) as cik_int,
+        sentenceID,
+        docID,
+        reportDate,
+        YEAR(CAST(reportDate AS DATE)) as report_year,
+        
+        CASE 
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 1993 AND 2000 THEN 'bin_1993_2000'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2001 AND 2005 THEN 'bin_2001_2005'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2006 AND 2010 THEN 'bin_2006_2010'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2011 AND 2015 THEN 'bin_2011_2015'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2016 AND 2020 THEN 'bin_2016_2020'
+            ELSE 'bin_other'
+        END as temporal_bin
+        
+    FROM read_parquet(getvariable('parquet_path'))
+    WHERE YEAR(CAST(reportDate AS DATE)) BETWEEN 1993 AND 2020
+)
+SELECT 
+    '═══ TEMPORAL DISTRIBUTION (5 BINS) ═══' as analysis_type,
+    temporal_bin,
+    COUNT(*) as n_sentences,
+    COUNT(DISTINCT cik_int) as n_companies,
+    COUNT(DISTINCT docID) as n_filings,
+    MIN(YEAR(CAST(reportDate AS DATE))) as first_year,
+    MAX(YEAR(CAST(reportDate AS DATE))) as last_year,
+    
+    -- Density metrics
+    ROUND(COUNT(*) / 1000000.0, 2) || 'M' as sentences_millions,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) || '%' as pct_of_total,
+    ROUND(COUNT(*) / COUNT(DISTINCT cik_int), 0) as avg_sentences_per_company,
+    ROUND(COUNT(*) / COUNT(DISTINCT docID), 0) as avg_sentences_per_filing,
+    
+    -- Data quality assessment
+    CASE 
+        WHEN temporal_bin = 'bin_2016_2020' THEN '✓✓ Modern - Highest quality, SOX mature'
+        WHEN temporal_bin = 'bin_2011_2015' THEN '✓ Recent - Good quality, XBRL adoption'
+        WHEN temporal_bin = 'bin_2006_2010' THEN '○ Mid-era - SOX implemented (2002-2006)'
+        WHEN temporal_bin = 'bin_2001_2005' THEN '△ Early 2000s - Pre/early SOX, variable quality'
+        WHEN temporal_bin = 'bin_1993_2000' THEN '△ Legacy - Pre-SOX, sparse digital filings'
+        ELSE '✗ Out of scope'
+    END as data_quality_assessment
+    
+FROM full_corpus_binned
+GROUP BY temporal_bin
+ORDER BY temporal_bin;
+
+
+-- Additional: Show year-by-year within each bin
+WITH full_corpus_binned AS (
+    SELECT 
+        YEAR(CAST(reportDate AS DATE)) as report_year,
+        CASE 
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 1993 AND 2000 THEN 'bin_1993_2000'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2001 AND 2005 THEN 'bin_2001_2005'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2006 AND 2010 THEN 'bin_2006_2010'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2011 AND 2015 THEN 'bin_2011_2015'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2016 AND 2020 THEN 'bin_2016_2020'
+        END as temporal_bin,
+        sentenceID,
+        CAST(cik AS INTEGER) as cik_int
+    FROM read_parquet(getvariable('parquet_path'))
+    WHERE YEAR(CAST(reportDate AS DATE)) BETWEEN 1993 AND 2020
+)
+SELECT 
+    '═══ YEAR/BIN BREAKDOWN ═══' as analysis_type,
+    temporal_bin,
+--    report_year,
+    COUNT(*) as n_sentences,
+    COUNT(DISTINCT cik_int) as n_companies,
+    ROUND(COUNT(*) / 1000.0, 1) || 'K' as sentences_thousands
+FROM full_corpus_binned
+GROUP BY temporal_bin
+-- , report_year
+ORDER BY temporal_bin 
+--, report_year
+;
+
+
+
+--#,analysis_type,temporal_bin,n_sentences,n_companies,sentences_thousands
+--1,═══ YEAR/BIN BREAKDOWN ═══,bin_1993_2000,"2,867,931","1,233",2867.9K
+--2,═══ YEAR/BIN BREAKDOWN ═══,bin_2001_2005,"7,137,964","1,650",7138.0K
+--3,═══ YEAR/BIN BREAKDOWN ═══,bin_2006_2010,"13,674,481","2,557",13674.5K
+--4,═══ YEAR/BIN BREAKDOWN ═══,bin_2011_2015,"19,537,347","3,370",19537.3K
+--5,═══ YEAR/BIN BREAKDOWN ═══,bin_2016_2020,"28,649,239","4,514",28649.2K
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- QUERY 3: Per-Company Density Analysis (Why We Can't Process "All Companies")
+-- ══════════════════════════════════════════════════════════════════════════
+
+WITH company_density AS (
+    SELECT 
+        CAST(cik AS INTEGER) as cik_int,
+        name,
+        COUNT(*) as n_sentences,
+        COUNT(DISTINCT docID) as n_filings,
+        COUNT(DISTINCT YEAR(CAST(reportDate AS DATE))) as n_years,
+        MIN(YEAR(CAST(reportDate AS DATE))) as first_year,
+        MAX(YEAR(CAST(reportDate AS DATE))) as last_year
+    FROM read_parquet(getvariable('parquet_path'))
+    WHERE YEAR(CAST(reportDate AS DATE)) BETWEEN 2006 AND 2020
+    GROUP BY cik_int, name
+),
+company_stats AS (
+    SELECT 
+        COUNT(*) as total_companies,
+        MIN(n_sentences) as min_sentences_per_company,
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY n_sentences) as p25_sentences,
+        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY n_sentences) as median_sentences,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY n_sentences) as p75_sentences,
+        MAX(n_sentences) as max_sentences_per_company,
+        AVG(n_sentences) as avg_sentences_per_company
+    FROM company_density
+)
+SELECT 
+    '═══ COMPANY DENSITY ANALYSIS ═══' as analysis_type,
+    total_companies || ' companies' as dataset_breadth,
+    ROUND(min_sentences_per_company, 0) || ' (min)' as sentences_range_min,
+    ROUND(median_sentences, 0) || ' (median)' as sentences_range_median,
+    ROUND(max_sentences_per_company, 0) || ' (max)' as sentences_range_max,
+    ROUND(avg_sentences_per_company, 0) || ' (avg)' as sentences_avg,
+    
+    -- Imbalance metrics
+    ROUND(max_sentences_per_company / NULLIF(min_sentences_per_company, 0), 1) || 'x' as imbalance_ratio,
+    
+    -- Memory implications
+    CASE 
+        WHEN total_companies > 1000 THEN '⚠️ Cannot process all companies in memory'
+        WHEN total_companies > 500 THEN '△ Would require distributed processing'
+        ELSE '✓ Manageable with sampling'
+    END as processing_feasibility
+FROM company_stats;
+
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- QUERY 4: Year-by-Year Explosion (Why Incremental Growth Compounds)
+-- ══════════════════════════════════════════════════════════════════════════
+
+WITH yearly_growth AS (
+    SELECT 
+        YEAR(CAST(reportDate AS DATE)) as report_year,
+        COUNT(*) as n_sentences,
+        COUNT(DISTINCT CAST(cik AS INTEGER)) as n_companies,
+        COUNT(DISTINCT docID) as n_filings
+    FROM read_parquet(getvariable('parquet_path'))
+    WHERE YEAR(CAST(reportDate AS DATE)) BETWEEN 2006 AND 2020
+    GROUP BY report_year
+)
+SELECT 
+    '═══ YEAR-OVER-YEAR GROWTH ═══' as analysis_type,
+    report_year,
+    n_sentences,
+    n_companies,
+    n_filings,
+    
+    -- Growth metrics
+    ROUND(n_sentences / 1000.0, 1) || 'K' as sentences_thousands,
+    n_sentences - LAG(n_sentences) OVER (ORDER BY report_year) as yoy_sentence_growth,
+    ROUND((n_sentences - LAG(n_sentences) OVER (ORDER BY report_year)) * 100.0 / 
+          NULLIF(LAG(n_sentences) OVER (ORDER BY report_year), 0), 1) || '%' as yoy_growth_pct,
+    
+    -- Cumulative burden
+    SUM(n_sentences) OVER (ORDER BY report_year) as cumulative_sentences,
+    ROUND(SUM(n_sentences) OVER (ORDER BY report_year) / 1000000.0, 2) || 'M' as cumulative_millions
+    
+FROM yearly_growth
+ORDER BY report_year;
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- 
+-- ══════════════════════════════════════════════════════════════════════════
+
+
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- BIN-WISE COUNTS FOR 21 CURATED COMPANIES
+-- ══════════════════════════════════════════════════════════════════════════
+
+WITH full_corpus_binned AS (
+    SELECT 
+        YEAR(CAST(reportDate AS DATE)) as report_year,
+        CASE 
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 1993 AND 2000 THEN 'bin_1993_2000'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2001 AND 2005 THEN 'bin_2001_2005'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2006 AND 2010 THEN 'bin_2006_2010'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2011 AND 2015 THEN 'bin_2011_2015'
+            WHEN YEAR(CAST(reportDate AS DATE)) BETWEEN 2016 AND 2020 THEN 'bin_2016_2020'
+        END as temporal_bin,
+        sentenceID,
+        CAST(cik AS INTEGER) as cik_int
+    FROM read_parquet(getvariable('parquet_path'))
+    WHERE YEAR(CAST(reportDate AS DATE)) BETWEEN 1993 AND 2020
+      AND CAST(cik AS INTEGER) IN (
+          SELECT cik_int FROM finrag_tgt_comps_21
+      )
+)
+SELECT 
+    '═══ 21 COMPANIES - BIN BREAKDOWN ═══' as analysis_type,
+    temporal_bin,
+    COUNT(*) as n_sentences,
+    COUNT(DISTINCT cik_int) as n_companies,
+    ROUND(COUNT(*) / 1000.0, 1) || 'K' as sentences_thousands,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) || '%' as pct_of_total
+FROM full_corpus_binned
+GROUP BY temporal_bin
+ORDER BY temporal_bin;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

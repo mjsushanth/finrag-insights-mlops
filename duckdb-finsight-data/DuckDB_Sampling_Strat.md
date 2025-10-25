@@ -22,26 +22,37 @@
 - Source: Custom selection based on sector diversity, underrepresented industries, etc.
 - Purpose: Enhance dataset representativeness beyond S&P 500
 
-**4. Final Strategy Explanation**
+**4. Strategy Explanation - Company Selection**
 - Combine S&P 500 companies and 50-200 specially selected firms. (Ideally, non S&P but overlap happens.)
 - They are chosen on weighted multi-objective sampling score ( `quality_score` ), potential risky companies and over-bloated text filing companies might be excluded, a curated list of hidden gem-companies are added.
 - Revised Target: ~550 companies.
 - Choosing 650 or 600 companies still resulted in a sentence-count sample over 6.5 million. So we wish to refine it.
+- As of Oct 16, 2025, Total distinct companies chosen: 540
+- As of Oct 17, 2025, companies chosen were 75: Eventually, I intentionally merged two selection criteria: market capitalization (S&P 500) and disclosure quality (notable companies). 73 overlapping companies represented high-value entities that meet BOTH criteria. This overlap validates the **quality scoring model.** The final deduplication step - was used to remove duplicates, standard practice in master data management to ensure uniqueness.
 
-**5. Final Company Count** (As of Oct 16, 2025 - might change later)
-- Total distinct companies chosen: 540
-- Eventually, I intentionally merged two selection criteria: market capitalization (S&P 500) and disclosure quality (notable companies). 73 overlapping companies represented high-value entities that meet BOTH criteria. This overlap validates the **quality scoring model.** The final deduplication step - was used to remove duplicates, standard practice in master data management to ensure uniqueness.
+- As of Oct 20, 2025, companies chosen were 21: Further refined to top 21 companies. We included a **new data ingestion** pipeline and concept for dynamic N-company selection (can be reused). 
+- The justification: we wanted to include latest era bin (2021-2024) and we aim for an estimation of 600k-800k sentences. We realize that the cost of expensive chunking and embedding generation is so high, even for 50k sentences - our local GPUs couldnt handle it. We hope to reduce dataset potentially (and need-based).
+
+------------------------------------------------------------------------------------------------------------------------
 
 ## Temporal Sampling Strategy
+
 **Analysis Framework**: Evaluated corpus across three regulatory/economic eras
 - **2006-2009 (SOX Era)**: Pre-financial crisis, Sarbanes-Oxley compliance period
 - **2010-2015 (Post-Crisis)**: Post-Dodd-Frank implementation, new disclosure regimes
 - **2016-2020 (Modern Era)**: Current disclosure standards, most user-relevant period
 
-**Final Sampling Weights** (15/20/65 split):
-- 2006-2009: 15% of sample (includes 2008 financial crisis event coverage)
-- 2010-2015: 20% of sample (regulatory transition period)
-- 2016-2020: 65% of sample (recency bias for product relevance)
+**Potential Sampling Weights** (A/B/C split):
+- Example:
+    - 2006-2009: 15% of sample (includes 2008 financial crisis event coverage)
+    - 2010-2015: 20% of sample (regulatory transition period)
+    - 2016-2020: 65% of sample (recency bias for product relevance)
+
+**Finalized Logic - adapts based on data reality**:
+- Take Took 100% of modern bin (2016-2020) → 654,000 sentences (rough estimate for N companies).
+- Split Leftover = 346K, Split 60/40 → bin2, bin1. 
+- Instead of clean target percentages we use an 60/40 split for older bins and adaptive allocation.
+
 
 **Rationale**: 
 - Targets recent financial queries (user interest skewed to 2016-2020)
@@ -51,6 +62,8 @@
 - **Strong companies write better 10-Ks.** 
 - Tier 3: "Recent IPOs with Momentum", Tier 2: "Industry Diversity" ( Biotech, Energy, Real Estate, Transport, Retail). 
 - Tier 1: ( Tech, Finance, Consumer, etc.)
+
+------------------------------------------------------------------------------------------------------------------------
 
 **Weighted Multi-Objective Sampling Score Explanation**:
 - The explanation for the formula, it depends on these chosen elements or stable flags:
@@ -73,7 +86,7 @@ HAVING
     AND latest_filing_year >= 2018  -- Recency relevance
     AND priority_section_sentences >= 3000  -- Information density
 ```
-
+- These filters determine WHO is in the dataset, not WHAT gets sampled.
 
 ### Initial Results of Scoring:
 - Elite: 1,783 → 1,050 points, companies are Elite 50.
@@ -83,6 +96,7 @@ HAVING
 - 150-300 Comps: 875 → 796 points
     - Regional banks and representation of small cap banks, declining struggling companies, companies with long history but very low sentences, subprime mortgage, controversial companies, Reputational risk companies, messy disclosure companies, gambling industry, etc.
 
+------------------------------------------------------------------------------------------------------------------------
 
 ### Post-Sampling:
 - Each stratum's allocation is rounded to nearest integer.

@@ -1,9 +1,10 @@
 
 -- ============================================================================
--- EXPLORE:
+-- 1Mil table to finrag_tgt_comps_21 CREATION. Modular Dev work for table creation.
+-- Later, in a different file, this is made into a dynamic N-company creation macro.
+
+-- EXPLORE: TABLES, QUICK GROUPING. 
 -- ============================================================================
-
-
 
 select * FROM  sampler.main.finrag_tgt_comps_75;
 
@@ -397,5 +398,5 @@ FROM sampler.main.finrag_tgt_comps_21;
 
 
 
-           
+
            

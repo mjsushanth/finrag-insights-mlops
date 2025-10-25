@@ -1,157 +1,436 @@
 -- ============================================================================
 -- SECTION DIMENSION TABLE: SEC 10-K Filing Structure
--- Maps numeric section codes to human-readable names and metadata
 -- ============================================================================
+
+-- CANONICAL DIMENSION TABLE: SEC 10-K Section Mapping v2.0
+-- Purpose: Multi-source mapping for historical (HF) and live (API) data
+-- ============================================================================
+
 
 DROP TABLE IF EXISTS sampler.main.dim_sec_sections;
 
+
 CREATE TABLE sampler.main.dim_sec_sections AS
 SELECT * FROM (VALUES
-    -- ═══════════════════════════════════════════════════════════════════
+    -- ═══════════════════════════════════════════════════════════════════════
+    -- Column Legend:
+    -- ═══════════════════════════════════════════════════════════════════════
+    -- sec_item_canonical:   PRIMARY KEY - Universal join column (ITEM_1, ITEM_1A, etc.)
+    -- hf_section_code:      Hugging Face dataset encoding (0-19)
+    -- api_section_code:     SEC EDGAR API / Official Item number ('1', '1A', '7')
+    -- section_code:         Machine-readable code (PART_I_ITEM_1)
+    -- section_name:         Human-readable name ('Item 1: Business')
+    -- section_description:  What this section contains
+    -- section_category:     Grouped taxonomy (P1_BUSINESS, P2_MDNA, etc.)
+    -- part_number:          Which Part of 10-K (1-4)
+    -- priority:             P0/P1/P2/P3/P4 for importance ranking
+    -- has_sub_items:        TRUE if contains sub-sections (1A, 1B, etc.)
+    -- ═══════════════════════════════════════════════════════════════════════
+    
     -- PART I: Business and Risk Information
-    -- ═══════════════════════════════════════════════════════════════════
-    (0,  'PART_0_HEADER',           'Document Header & Cover',           'P0_METADATA',    0, 'Document metadata, cover page, table of contents'),
-    (1,  'PART_I_ITEM_1',            'Item 1: Business',                  'P1_BUSINESS',    1, 'Business description, products, strategy, competition'),
-    (1.01, 'PART_I_ITEM_1A',         'Item 1A: Risk Factors',             'P1_RISK',        1, 'Risk factors and uncertainties'),
-    (1.02, 'PART_I_ITEM_1B',         'Item 1B: Unresolved Staff Comments','P1_SEC_COMMENTS', 1, 'SEC staff comments (if any)'),
-    (2,  'PART_I_ITEM_2',            'Item 2: Properties',                'P1_PROPERTIES',  1, 'Physical properties, facilities, real estate'),
-    (3,  'PART_I_ITEM_3',            'Item 3: Legal Proceedings',         'P1_LEGAL',       1, 'Litigation, legal matters'),
-    (4,  'PART_I_ITEM_4',            'Item 4: Mine Safety Disclosures',   'P1_MINE_SAFETY', 1, 'Mine safety (if applicable)'),
+    -- ═══════════════════════════════════════════════════════════════════════
+    (
+        'ITEM_1',                           -- sec_item_canonical
+        0,                                  -- hf_section_code
+        '1',                                -- api_section_code
+        'PART_I_ITEM_1',                    -- section_code
+        'Item 1: Business',                 -- section_name
+        'Business description, products, services, strategy, competition, market segments', -- section_description
+        'P1_BUSINESS',                      -- section_category
+        1,                                  -- part_number
+        'P1',                               -- priority
+        TRUE                                -- has_sub_items
+    ),
     
-    -- ═══════════════════════════════════════════════════════════════════
+    (
+        'ITEM_1A',
+        1,
+        '1A',
+        'PART_I_ITEM_1A',
+        'Item 1A: Risk Factors',
+        'Risk factors, uncertainties, forward-looking statement risks',
+        'P1_RISK',
+        1,
+        'P1',
+        FALSE
+    ),
+    
+    (
+        'ITEM_1B',
+        2,
+        '1B',
+        'PART_I_ITEM_1B',
+        'Item 1B: Unresolved Staff Comments',
+        'Outstanding SEC staff comments (typically "None")',
+        'P1_SEC_COMMENTS',
+        1,
+        'P3',
+        FALSE
+    ),
+    
+    (
+        'ITEM_2',
+        3,
+        '2',
+        'PART_I_ITEM_2',
+        'Item 2: Properties',
+        'Physical properties, facilities, real estate holdings',
+        'P1_PROPERTIES',
+        1,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_3',
+        4,
+        '3',
+        'PART_I_ITEM_3',
+        'Item 3: Legal Proceedings',
+        'Litigation, legal matters, material legal proceedings',
+        'P1_LEGAL',
+        1,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_4',
+        5,
+        '4',
+        'PART_I_ITEM_4',
+        'Item 4: Mine Safety Disclosures',
+        'Mine safety statistics (only for mining companies)',
+        'P1_MINE_SAFETY',
+        1,
+        'P3',
+        FALSE
+    ),
+    
+    -- ═══════════════════════════════════════════════════════════════════════
     -- PART II: Financial Information and Management Analysis
-    -- ═══════════════════════════════════════════════════════════════════
-    (5,  'PART_II_ITEM_5',           'Item 5: Market for Stock',          'P2_MARKET',      2, 'Stock market data, dividends, repurchases'),
-    (6,  'PART_II_ITEM_6',           'Item 6: Selected Financial Data',   'P2_SELECTED_FIN',2, 'Multi-year financial summary'),
-    (7,  'PART_II_ITEM_7',           'Item 7: MD&A',                      'P2_MDNA',        2, 'Management Discussion & Analysis - CRITICAL for financial QA'),
-    (7.01, 'PART_II_ITEM_7A',        'Item 7A: Market Risk',              'P2_MARKET_RISK', 2, 'Quantitative/qualitative market risk disclosures'),
-    (8,  'PART_II_ITEM_8',           'Item 8: Financial Statements',      'P2_FINANCIALS',  2, 'Audited financial statements - CRITICAL for numbers'),
-    (9,  'PART_II_ITEM_9',           'Item 9: Accounting Disagreements',  'P2_ACCT_DISAGREE',2, 'Disagreements with auditors (rare)'),
-    (9.01, 'PART_II_ITEM_9A',        'Item 9A: Controls and Procedures',  'P2_CONTROLS',    2, 'Internal controls, SOX 404 disclosures'),
-    (9.02, 'PART_II_ITEM_9B',        'Item 9B: Other Information',        'P2_OTHER_INFO',  2, 'Other material information'),
+    -- ═══════════════════════════════════════════════════════════════════════
     
-    -- ═══════════════════════════════════════════════════════════════════
+    (
+        'ITEM_5',
+        6,
+        '5',
+        'PART_II_ITEM_5',
+        'Item 5: Market for Registrant Common Equity',
+        'Stock market data, dividends, share repurchases, stock performance',
+        'P2_MARKET',
+        2,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_6',
+        7,
+        '6',
+        'PART_II_ITEM_6',
+        'Item 6: [Reserved] / Selected Financial Data',
+        'Multi-year financial summary (deprecated after 2020 for smaller filers)',
+        'P2_SELECTED_FIN',
+        2,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_7',
+        8,
+        '7',
+        'PART_II_ITEM_7',
+        'Item 7: Management Discussion & Analysis (MD&A)',
+        'Revenue trends, operating results, liquidity, capital resources, outlook - CRITICAL',
+        'P2_MDNA',
+        2,
+        'P0',                               -- CRITICAL priority
+        TRUE                                -- Has Item 7A sub-item
+    ),
+    
+    (
+        'ITEM_7A',
+        9,
+        '7A',
+        'PART_II_ITEM_7A',
+        'Item 7A: Quantitative and Qualitative Disclosures About Market Risk',
+        'Interest rate risk, foreign currency risk, commodity risk exposures',
+        'P2_MARKET_RISK',
+        2,
+        'P1',
+        FALSE
+    ),
+    
+    (
+        'ITEM_8',
+        10,
+        '8',
+        'PART_II_ITEM_8',
+        'Item 8: Financial Statements and Supplementary Data',
+        'Audited financial statements, balance sheet, income statement, cash flow, notes - CRITICAL',
+        'P2_FINANCIALS',
+        2,
+        'P0',                               -- CRITICAL priority
+        FALSE
+    ),
+    
+    (
+        'ITEM_9',
+        11,
+        '9',
+        'PART_II_ITEM_9',
+        'Item 9: Changes in and Disagreements with Accountants',
+        'Accounting disagreements with auditors (rare, usually "None")',
+        'P2_ACCT_DISAGREE',
+        2,
+        'P3',
+        TRUE                                -- Has 9A, 9B sub-items
+    ),
+    
+    (
+        'ITEM_9A',
+        12,
+        '9A',
+        'PART_II_ITEM_9A',
+        'Item 9A: Controls and Procedures',
+        'Internal controls, SOX 404 disclosures, ICFR effectiveness',
+        'P2_CONTROLS',
+        2,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_9B',
+        13,
+        '9B',
+        'PART_II_ITEM_9B',
+        'Item 9B: Other Information',
+        'Material information not previously disclosed',
+        'P2_OTHER_INFO',
+        2,
+        'P3',
+        FALSE
+    ),
+    
+    -- ═══════════════════════════════════════════════════════════════════════
     -- PART III: Directors, Officers, Corporate Governance
-    -- ═══════════════════════════════════════════════════════════════════
-    (10, 'PART_III_ITEM_10',         'Item 10: Directors, Officers & Gov','P3_DIRECTORS',   3, 'Board of directors, executive officers'),
-    (11, 'PART_III_ITEM_11',         'Item 11: Executive Compensation',   'P3_COMPENSATION',3, 'Executive pay, equity grants'),
-    (12, 'PART_III_ITEM_12',         'Item 12: Security Ownership',       'P3_OWNERSHIP',   3, 'Share ownership, equity plans'),
-    (13, 'PART_III_ITEM_13',         'Item 13: Related Transactions',     'P3_RELATED_TX',  3, 'Related party transactions'),
-    (14, 'PART_III_ITEM_14',         'Item 14: Fees and Services',        'P3_AUDITOR_FEES',3, 'Auditor fees and services'),
+    -- ═══════════════════════════════════════════════════════════════════════
     
-    -- ═══════════════════════════════════════════════════════════════════
+    (
+        'ITEM_10',
+        14,
+        '10',
+        'PART_III_ITEM_10',
+        'Item 10: Directors, Executive Officers and Corporate Governance',
+        'Board of directors, executive officers, governance structure',
+        'P3_DIRECTORS',
+        3,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_11',
+        15,
+        '11',
+        'PART_III_ITEM_11',
+        'Item 11: Executive Compensation',
+        'Executive pay, equity grants, compensation discussion and analysis',
+        'P3_COMPENSATION',
+        3,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_12',
+        16,
+        '12',
+        'PART_III_ITEM_12',
+        'Item 12: Security Ownership of Certain Beneficial Owners and Management',
+        'Share ownership by directors, officers, major shareholders, equity plans',
+        'P3_OWNERSHIP',
+        3,
+        'P2',
+        FALSE
+    ),
+    
+    (
+        'ITEM_13',
+        17,
+        '13',
+        'PART_III_ITEM_13',
+        'Item 13: Certain Relationships and Related Transactions',
+        'Related party transactions, director independence',
+        'P3_RELATED_TX',
+        3,
+        'P3',
+        FALSE
+    ),
+    
+    (
+        'ITEM_14',
+        18,
+        '14',
+        'PART_III_ITEM_14',
+        'Item 14: Principal Accountant Fees and Services',
+        'Auditor fees, audit and non-audit services',
+        'P3_AUDITOR_FEES',
+        3,
+        'P3',
+        FALSE
+    ),
+    
+    -- ═══════════════════════════════════════════════════════════════════════
     -- PART IV: Exhibits and Signatures
-    -- ═══════════════════════════════════════════════════════════════════
-    (15, 'PART_IV_ITEM_15',          'Item 15: Exhibits List',            'P4_EXHIBITS_LIST',4, 'List of exhibits and financial schedules'),
-    (16, 'PART_IV_ITEM_16',          'Item 16: Form 10-K Summary',        'P4_SUMMARY',     4, 'Optional summary section'),
+    -- ═══════════════════════════════════════════════════════════════════════
     
-    -- ═══════════════════════════════════════════════════════════════════
-    -- SUPPLEMENTARY SECTIONS (Your dataset shows these exist)
-    -- ═══════════════════════════════════════════════════════════════════
-    (17, 'SUPPLEMENTARY_17',         'Supplementary Data 17',             'P5_SUPPLEMENTARY',5, 'Additional supplementary information'),
-    (18, 'SUPPLEMENTARY_18',         'Supplementary Data 18',             'P5_SUPPLEMENTARY',5, 'Additional supplementary information'),
-    (19, 'EXHIBITS_SECTION',         'Exhibits Content',                  'P5_EXHIBITS',    5, 'Actual exhibit documents'),
-    (20, 'SIGNATURES_SECTION',       'Signatures',                        'P5_SIGNATURES',  5, 'Officer and director signatures'),
+    (
+        'ITEM_15',
+        19,
+        '15',
+        'PART_IV_ITEM_15',
+        'Item 15: Exhibits and Financial Statement Schedules',
+        'List of exhibits, financial schedules, exhibit index',
+        'P4_EXHIBITS',
+        4,
+        'P3',
+        TRUE                                -- Has Item 16 as optional extension
+    ),
     
-    -- ═══════════════════════════════════════════════════════════════════
-    -- UNMAPPED (Fallback)
-    -- ═══════════════════════════════════════════════════════════════════
-    (99, 'UNMAPPED_SECTION',         'Unknown Section',                   'P9_UNKNOWN',     9, 'Section not mapped in dimension table')
-    
+    (
+        'ITEM_16',
+        NULL,                               -- Not in HF dataset (optional, rarely used)
+        '16',
+        'PART_IV_ITEM_16',
+        'Item 16: Form 10-K Summary',
+        'Optional summary of 10-K (rarely used)',
+        'P4_SUMMARY',
+        4,
+        'P3',
+        FALSE
+    )
+
 ) AS t(
-    section_id,           -- INT: Maps to your numeric 'section' column
-    section_code,         -- VARCHAR: Machine-readable code
-    section_name,         -- VARCHAR: Human-readable name
-    section_category,     -- VARCHAR: Grouped category for filtering
-    part_number,          -- INT: Which "Part" of 10-K (1-4)
-    section_description   -- VARCHAR: What this section contains
+    sec_item_canonical,
+    hf_section_code,
+    api_section_code,
+    section_code,
+    section_name,
+    section_description,
+    section_category,
+    part_number,
+    priority,
+    has_sub_items
 );
 
 
+select * from sampler.main.dim_sec_sections dss ;
+
 
 
 
 -- ============================================================================
--- ADD METADATA COLUMNS
+-- EXPORT dim_sec_sections to Parquet
+-- Replaces existing file in exports directory
 -- ============================================================================
 
-ALTER TABLE sampler.main.dim_sec_sections ADD COLUMN rag_priority VARCHAR;
-ALTER TABLE sampler.main.dim_sec_sections ADD COLUMN typical_query_types VARCHAR;
-ALTER TABLE sampler.main.dim_sec_sections ADD COLUMN is_financial_core BOOLEAN;
+SET VARIABLE export_path = 'D:/JoelDesktop folds_24/NEU FALL2025/MLops IE7374 Project/finrag-insights-mlops/data/exports';
+SET VARIABLE export_filename = 'finrag_dim_sec_sections.parquet';
 
-UPDATE sampler.main.dim_sec_sections
-SET 
-    rag_priority = CASE section_id
-        WHEN 1 THEN 'HIGH'        -- Business description
-        WHEN 1.01 THEN 'MEDIUM'   -- Risk factors
-        WHEN 7 THEN 'CRITICAL'    -- MD&A
-        WHEN 8 THEN 'CRITICAL'    -- Financial statements
-        WHEN 7.01 THEN 'HIGH'     -- Market risk
-        WHEN 10 THEN 'MEDIUM'     -- Directors (governance queries)
-        WHEN 11 THEN 'HIGH'       -- Executive comp (common query)
-        ELSE 'LOW'
-    END,
-    
-    typical_query_types = CASE section_id
-        WHEN 1 THEN 'What does the company do? Products? Strategy?'
-        WHEN 1.01 THEN 'What are the risks? What could go wrong?'
-        WHEN 7 THEN 'Revenue trends? Why did margins change? Outlook?'
-        WHEN 8 THEN 'What was revenue? Net income? Cash flow? Balance sheet?'
-        WHEN 7.01 THEN 'Interest rate exposure? FX risk? Commodity risk?'
-        WHEN 10 THEN 'Who is the CEO? Board members?'
-        WHEN 11 THEN 'How much does the CEO make? Stock options?'
-        ELSE 'Specialized queries'
-    END,
-    
-    is_financial_core = CASE 
-        WHEN section_id IN (7, 8, 7.01, 6) THEN true
-        ELSE false
-    END;
+-- Build full path
+SET VARIABLE export_full_path = (
+    getvariable('export_path') || '/' || getvariable('export_filename')
+);
 
-
-    
-SELECT * FROM sampler.main.dim_sec_sections;
-    
--- ============================================================================
--- VALIDATION & PREVIEW
--- ============================================================================
-
--- V1: Show all sections with metadata
+-- Display export path for confirmation
 SELECT 
-    section_id,
-    section_code,
-    section_name,
-    section_category,
-    rag_priority,
-    is_financial_core,
-    typical_query_types
-FROM sampler.main.dim_sec_sections
-WHERE section_id <= 20  -- Your dataset has sections 0-20
-ORDER BY section_id;
+    'Exporting dimension table...' as status,
+    getvariable('export_full_path') as destination,
+    COUNT(*) as n_sections
+FROM sampler.main.dim_sec_sections;
 
+-- Prepare export statement
+PREPARE export_dim_sections AS
+    COPY sampler.main.dim_sec_sections
+    TO ?
+    (FORMAT PARQUET, COMPRESSION 'ZSTD');
 
--- V2: Check which sections are in your sample data
+-- Execute export
+EXECUTE export_dim_sections(getvariable('export_full_path'));
+
+-- Confirmation
 SELECT 
-    sf.section,
-    ds.section_name,
-    ds.section_category,
-    ds.rag_priority,
-    COUNT(*) as n_sentences,
-    COUNT(DISTINCT sf.cik_int) as n_companies,
-    ROUND(AVG(CASE WHEN sf.likely_kpi THEN 1.0 ELSE 0.0 END) * 100, 1) as pct_likely_kpi
-FROM sample_1m_finrag sf
-LEFT JOIN sampler.main.dim_sec_sections ds ON CAST(sf.section AS DOUBLE) = ds.section_id
-GROUP BY sf.section, ds.section_name, ds.section_category, ds.rag_priority
-ORDER BY sf.section;
+    '✓ EXPORT COMPLETE' as status,
+    getvariable('export_filename') as filename,
+    COUNT(*) as rows_exported,
+    COUNT(DISTINCT sec_item_canonical) as unique_items
+FROM sampler.main.dim_sec_sections;
 
 
--- V3: Identify any unmapped sections in your data
-SELECT DISTINCT 
-    section,
-    COUNT(*) as n_sentences
-FROM sample_1m_finrag
-WHERE CAST(section AS DOUBLE) NOT IN (SELECT section_id FROM sampler.main.dim_sec_sections)
-GROUP BY section
-ORDER BY section;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

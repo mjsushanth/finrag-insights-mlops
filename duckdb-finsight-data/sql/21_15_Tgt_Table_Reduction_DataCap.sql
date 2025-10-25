@@ -3,7 +3,10 @@
 -- Date: October, 2025
 -- ============================================================================
 
-
+-- ============================================================================
+-- Early Dev/Analysis and Table creation attempts:
+-- Code for making 150 Target company DIM table, and then 75 Target company.
+-- ============================================================================
 
 --Top 50: Weight ≥ 0.35% (captures ~60% of index weight)
 --Top 100: Weight ≥ 0.14% (captures ~80% of index weight)
@@ -47,8 +50,6 @@ FROM (
     SELECT * FROM notable_top50
 )
 ORDER BY company_id;
-
-
 
 
 
@@ -106,11 +107,6 @@ ORDER BY temporal_bin;
 
 
 
-
-
-
-
-
 CREATE OR REPLACE TABLE finrag_tgt_comps_75 AS
 WITH sp500_top50 AS (
     -- Top 50 S&P 500 by market weight
@@ -149,10 +145,6 @@ FROM (
     SELECT * FROM notable_top25
 )
 ORDER BY company_id;
-
-
-
-
 
 
 
