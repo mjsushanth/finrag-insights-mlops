@@ -21,13 +21,10 @@ __pycache__/
 build/
 dist/
 *.lock
-.venv/
-venv/
-.env/          # dotenv files with secrets
-.env.*         # e.g., .env.dev, .env.prod
-
 
 .secrets
+.secrets/
+
 .python-version
 .mypy_cache/
 .pytest_cache/
@@ -40,8 +37,37 @@ htmlcov/
 # -----------------------------
 # virtual environments
 # -----------------------------
+venv/
+.venv/
 ENV/
 env/
+
+# Environment variable files (secrets)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# -----------------------------
+# AWS assets
+# -----------------------------`
+
+
+# Ignore all .env files in .aws_secrets folders (actual credentials)
+**/.aws_secrets/*.env
+
+src_aws_etl/.aws_secrets/aws_credentials.env
+**/.aws_secrets/aws_credentials.env
+
+# But keep templates and folder structure
+!**/.aws_secrets/*.env.example
+!**/.aws_secrets/.gitkeep
+
+# Ignore local assets (temporary files, downloads, etc.)
+src_aws_etl/.aws_local_assets/
+
 
 
 # -----------------------------

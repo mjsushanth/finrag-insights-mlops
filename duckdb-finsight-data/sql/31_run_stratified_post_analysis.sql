@@ -1,4 +1,22 @@
 
+
+/*
+ * 	-- POST-SAMPLING VALIDATION SUITE
+	-- Author: Joel Markapudi
+ *
+ *
+ *	VALIDATION QUERY INDEX:
+ *	V1:  OVERALL STATISTICS - Row counts, company/filing/section diversity, avg text length (expect: 1M+ rows, 75+ companies, 20 sections, 15 years)
+*	V2:  TEMPORAL DISTRIBUTION - Actual vs target allocation per bin, validates 15/21/65 weighting achieved within ±5K tolerance
+*	V3:  MODERN ERA COVERAGE - Verifies 100% capture of 2016-2020 bin (654K sentences, most critical period for query relevance)
+*	V4:  SECTION COVERAGE PER BIN - Confirms all 20 SEC sections present in each temporal bin (detects systematic exclusion bias)
+*	V5:  COMPANY COVERAGE - Validates all 75 target companies present (or 76 if GOOGL injected), flags missing companies
+*	V6:  FEATURE FLAG STATISTICS - Counts RAG features (KPIs, numbers, comparisons), validates Section D execution (expect: 30-40% numeric)
+*	V7:  SIGNAL SCORE DISTRIBUTION - Histogram of retrieval_signal_score composite metric (range: -2 to 10+, higher = more relevant)
+*	V9:  DATA QUALITY CHECKS - NULL detection in critical fields (cik, sentence, section_ID), flags corruption or join failures
+*	V10: COMPANY DISTRIBUTION BALANCE - Per-company sentence counts (min/median/max), acceptable imbalance <10x ratio
+*	V11: SECTION METADATA INTEGRITY - Validates dimension join, canonical naming (ITEM_* format), P0/P1 priority corpus % (target: 80-90%)
+*/
 -- ============================================================================
 -- section_ID E: FINAL VALIDATION & SUMMARY
 -- ============================================================================
@@ -58,7 +76,7 @@ SELECT
     ba.sampling_rate_pct as planned_rate,
     CASE 
         WHEN ABS(COUNT(*) - ba.target_n) <= 5000 THEN '✓ Within tolerance'
-        ELSE '⚠️ Exceeds tolerance'
+        ELSE 'Exceeds tolerance (With Manual Injeciton/Google - Fine.)'
     END as target_check
 FROM sample_1m_finrag sf
 LEFT JOIN bin_allocations ba ON sf.temporal_bin = ba.temporal_bin
@@ -112,9 +130,12 @@ SELECT
     '5. COMPANY COVERAGE' as validation_check,
     COUNT(DISTINCT cik_int) as companies_in_sample,
     75 as companies_expected,
-    75 - COUNT(DISTINCT cik_int) as missing_companies,
+    CASE WHEN  (75 - COUNT(DISTINCT cik_int)) > 1 THEN (75 - COUNT(DISTINCT cik_int))
+    		 ELSE 0 
+		 END 
+    		 as missing_companies,
     CASE 
-        WHEN COUNT(DISTINCT cik_int) = 75 THEN '✓ All companies present'
+        WHEN COUNT(DISTINCT cik_int) >= 75 THEN '✓ All companies present'
         ELSE '⚠️ Missing ' || (75 - COUNT(DISTINCT cik_int)) || ' companies'
     END as coverage_status
 FROM sample_1m_finrag;
@@ -203,8 +224,10 @@ FROM company_stats;
 
 
 
+
+
 -- ══════════════════════════════════════════════════════════════════════════
--- SECTION METADATA INTEGRITY & MAPPING VALIDATION
+-- V11: SECTION METADATA INTEGRITY & MAPPING VALIDATION
 -- Verifies dimension table join worked correctly and checks for anomalies
 -- ══════════════════════════════════════════════════════════════════════════
 
@@ -261,6 +284,8 @@ SELECT
     
 FROM section_mapping_check
 ORDER BY section_ID;
+
+
 /*
  * all valid !
  * 
@@ -289,6 +314,11 @@ ORDER BY section_ID;
 -- Summary statistics
 
 
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- V12: 
+-- ══════════════════════════════════════════════════════════════════════════
 
 
 WITH section_mapping_check AS (
@@ -338,4 +368,53 @@ FROM section_mapping_check;
 --1,═══ VALIDATION SUMMARY ═══,20,0,20,"856,363",85.33,[NULL]
 
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- ══════════════════════════════════════════════════════════════════════════
+
+
+/*
+ * 
+-- ══════════════════════════════════════════════════════════════════════════
+-- PRE-STAGING DIAGNOSTIC: Dimension Table Join Quality Check
+-- Verifies all GOOGL section_names can join to dim_sec_sections
+-- ══════════════════════════════════════════════════════════════════════════
+
+WITH join_test AS (
+    SELECT 
+        src.section_ID,
+        src.section_name as src_section_name,
+        src.section_item as src_section_item,
+        dim.sec_item_canonical as dim_matched_canonical,
+        dim.section_name as dim_matched_desc,
+        dim.section_category as dim_matched_category,
+        dim.priority as dim_matched_priority,
+        
+        -- Join success indicator
+        CASE 
+            WHEN dim.sec_item_canonical IS NOT NULL THEN '✅ JOIN SUCCESS'
+            ELSE '❌ JOIN FAILED'
+        END as join_status
+        
+    FROM read_parquet(getvariable('incremental_data_path')) src
+    LEFT JOIN sampler.main.dim_sec_sections dim
+        ON TRIM(UPPER(src.section_item)) = TRIM(UPPER(dim.sec_item_canonical))
+)
+SELECT 
+    '🔍 DIMENSION JOIN ANALYSIS' as diagnostic,
+    section_ID,
+    src_section_name,
+    src_section_item,
+    dim_matched_canonical,
+    SUBSTR(dim_matched_desc, 1, 40) as dim_desc_preview,
+    dim_matched_category,
+    dim_matched_priority,
+    join_status,
+    COUNT(*) as n_rows_affected
+FROM join_test
+GROUP BY section_ID, src_section_name, src_section_item, 
+         dim_matched_canonical, dim_matched_desc, 
+         dim_matched_category, dim_matched_priority, join_status
+ORDER BY section_ID, join_status;
+ * 
+ */
 

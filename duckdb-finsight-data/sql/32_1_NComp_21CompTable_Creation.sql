@@ -29,7 +29,12 @@
 -- ═══════════════════════════════════════════════════════════════════
 *
 *
+*	TEST QUERIES / MODULES:
 *
+*	V1: Row counts and coverage
+*	V2: Temporal distribution check
+*	V3: Section coverage check
+*	V4: Incremental Injection Impact Check
 *
 */
 
@@ -119,7 +124,7 @@ SELECT
     section_ID,            
     section_name,              -- : ITEM_1A (canonical ID)
 
-	--    ## keep things lean.
+	-- ## keep things lean. optional. 
 	--    section_desc,              -- : "Item 1A: Risk Factors" (human-readable)
 	--    section_category,          -- P1_RISK
 	--    sec_dim_priority,          -- P1
@@ -133,8 +138,9 @@ SELECT
     sentence,
     
     -- ═══════════════════════════════════════════════════════════════════
-    -- TEMPORAL (3 columns)
+    -- TEMPORAL (4 columns)
     -- ═══════════════════════════════════════════════════════════════════
+    filingDate,
     report_year,
     reportDate,
     temporal_bin,
@@ -364,6 +370,86 @@ SELECT
         ELSE '⚠️ Limited sections'
     END
 FROM finrag_21companies_modern;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- V4: Incremental Injection Impact Check
+-- ──────────────────────────────────────────────────────────────────────────
+
+
+WITH subset_quality AS (
+    SELECT 
+        'finrag_21companies_allbins' as table_name,
+        load_method,
+        COUNT(*) as n_rows,
+        COUNT(DISTINCT cik_int) as n_companies,
+        
+        -- Check for NULL/placeholder values in critical fields
+        SUM(CASE WHEN tickers IS NULL THEN 1 ELSE 0 END) as null_tickers,
+        SUM(CASE WHEN tickers = ['MANUAL_REVIEW_REQ'] THEN 1 ELSE 0 END) as placeholder_tickers,
+        SUM(CASE WHEN sic IS NULL THEN 1 ELSE 0 END) as null_sic,
+        SUM(CASE WHEN filingDate IS NULL THEN 1 ELSE 0 END) as null_filingDate,
+        
+        -- Feature flags should be populated by Section D
+        SUM(CASE WHEN likely_kpi IS NULL THEN 1 ELSE 0 END) as null_kpi_flags,
+        SUM(CASE WHEN has_numbers IS NULL THEN 1 ELSE 0 END) as null_number_flags,
+        
+        -- Check if GOOGL data is present
+        MAX(CASE WHEN cik_int = 1652044 THEN 'GOOGL PRESENT' ELSE NULL END) as googl_status
+        
+    FROM finrag_21companies_allbins
+    GROUP BY load_method
+    
+    UNION ALL
+    
+    SELECT 
+        'finrag_21companies_modern',
+        load_method,
+        COUNT(*),
+        COUNT(DISTINCT cik_int),
+        SUM(CASE WHEN tickers IS NULL THEN 1 ELSE 0 END),
+        SUM(CASE WHEN tickers = ['MANUAL_REVIEW_REQ'] THEN 1 ELSE 0 END),
+        SUM(CASE WHEN sic IS NULL THEN 1 ELSE 0 END),
+        SUM(CASE WHEN filingDate IS NULL THEN 1 ELSE 0 END),
+        SUM(CASE WHEN likely_kpi IS NULL THEN 1 ELSE 0 END),
+        SUM(CASE WHEN has_numbers IS NULL THEN 1 ELSE 0 END),
+        MAX(CASE WHEN cik_int = 1652044 THEN 'GOOGL PRESENT' ELSE NULL END)
+    FROM finrag_21companies_modern
+    GROUP BY load_method
+)
+SELECT 
+    '═══ SUBSET QUALITY VALIDATION ═══' as validation_type,
+    table_name,
+    load_method,
+    n_rows,
+    n_companies,
+    googl_status,
+    null_tickers,
+    placeholder_tickers,
+    null_sic,
+    null_filingDate,
+    null_kpi_flags,
+    null_number_flags,
+    CASE 
+        WHEN null_tickers = 0 AND null_filingDate = 0 AND null_kpi_flags = 0 
+        THEN '✅ All critical fields populated'
+        WHEN null_tickers > 0 OR placeholder_tickers > 0
+        THEN '⚠️ Ticker metadata needs review'
+        WHEN null_kpi_flags > 0
+        THEN '❌ Feature engineering failed for some rows'
+        ELSE '○ Acceptable quality'
+    END as quality_status
+FROM subset_quality
+ORDER BY table_name, load_method;
+
+
+
+--#,validation_type,table_name,load_method,n_rows,n_companies,googl_status,null_tickers,placeholder_tickers,null_sic,null_filingDate,null_kpi_flags,null_number_flags,quality_status
+--1,═══ SUBSET QUALITY VALIDATION ═══,finrag_21companies_allbins,incremental_inject,"8,510",1,GOOGL PRESENT,0,0,0,0,0,0,✅ All critical fields populated
+--2,═══ SUBSET QUALITY VALIDATION ═══,finrag_21companies_allbins,stratified_sampling,"278,556",20,[NULL],0,0,0,0,0,0,✅ All critical fields populated
+--3,═══ SUBSET QUALITY VALIDATION ═══,finrag_21companies_modern,incremental_inject,"6,702",1,GOOGL PRESENT,0,0,0,0,0,0,✅ All critical fields populated
+--4,═══ SUBSET QUALITY VALIDATION ═══,finrag_21companies_modern,stratified_sampling,"175,619",20,[NULL],0,0,0,0,0,0,✅ All critical fields populated
+
 
 
 -- ══════════════════════════════════════════════════════════════════════════

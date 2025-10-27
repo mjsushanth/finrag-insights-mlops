@@ -17,6 +17,55 @@ Building an AI-powered financial analysis pipeline for structured KPI extraction
  
 
 
+## High level Conceptual Flow:
+┌─────────────────────────────────────────────────────────────┐
+│ DATA ENGINEERING LAYER (aws_src/)                           │
+│ - Extract: S3 bucket management, file I/O                   │
+│ - Transform: Merge, dedup, schema validation                │
+│ - Load: Export to parquet (NO embeddings here!)             │
+└─────────────────────────────────────────────────────────────┘
+                          ↓ (Clean parquet files)
+┌─────────────────────────────────────────────────────────────┐
+│ ML FEATURE ENGINEERING LAYER (embeddings_src/)              │
+│ - Chunking strategies: Semantic, fixed-size, sliding window │
+│ - Embedding models: sentence-transformers, OpenAI, Cohere   │
+│ - Evaluation: Retrieval@K, chunk overlap analysis           │
+│ - Experimentation: MLflow tracking, A/B tests               │
+└─────────────────────────────────────────────────────────────┘
+                          ↓ (Vectors + metadata)
+┌─────────────────────────────────────────────────────────────┐
+│ SERVING LAYER (rag_api/)                                    │
+│ - Vector store: FAISS, Pinecone, S3 Vectors                 │
+│ - Retrieval: Hybrid search, reranking                       │
+│ - Generation: LLM inference                                 │
+└─────────────────────────────────────────────────────────────┘
+
+FINRAG-INSIGHTS-MLOPS/
+│
+
+├── duckdb_finsight_data/           # data engineering. entire DuckDB work
+├── notebooks/                      # intense research ( EDAs, Polars, Tests, llamacpp..)
+└── model/                          # model experiments (potentially)
+
+├── src_aws_etl/                    # data engineering
+│   ├── config/
+│   ├── etl/ .....
+│   └── requirements.txt            # boto3, polars (no cuda ML libs!)
+│
+├── src_embeddings/                 # ML feature engineering
+│   ├── chunking/
+│   ├── models/
+│   ├── experiments/
+│   ├── gpu_config/
+│   ├── tests/
+│   └── requirements.txt           
+
+├── src_rag_api/                    # Production RAG serving
+│   ├── retrieval/
+│   ├── generation/
+│   └── requirements.txt
+
+
 ### Source Dataset Links:
 1. Primary: https://huggingface.co/datasets/khaihernlow/financial-reports-sec
 2. Potentially used: EdgarTools https://github.com/dgunning/edgartools

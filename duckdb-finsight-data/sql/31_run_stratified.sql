@@ -10,7 +10,51 @@
 
 -- STRATIFICATION DIMENSIONS:
 -- 1. Company (CIK) - 700 target companies
--- 2. Temporal bins - Decide on an A/B/C weighting (2006-2009, 2010-2015, 2016-2020) ( Example: 15/20/65. )
+-- 2. Temporal bins - Decide on an A/B/C weighting (2006-2009, 2010-2015, 2016-2020) (Example: 15/20/65.)
+-- 3. New item: After 1m sampling, Add GOOGL data manually. We decided that it was important enough to incorporate it manually.
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                    REQUIRED ASSETS BEFORE EXECUTION                      ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+PARQUET FILES (Data Sources):
+1. sec_filings_large_full.parquet
+   • Location: /data/exports/
+   • Source: HuggingFace dataset which has been custom-merged ( JSONL/arrows to Parquet 30x compression. )
+   • Content: 71.8M sentences, 4,674 companies, 1993-2020
+
+2. [OPTIONAL] 10-K_merged_YYYY_YYYY_COMPANY_DATE.parquet
+   • Location: /data/exports/
+   • Purpose: Incremental injection (e.g., GOOGL historical data)
+   • Required if: enable_incremental_injection = TRUE
+
+DIMENSION TABLES (Must exist in sampler.main schema):
+3. finrag_tgt_comps_75
+   • Columns: cik_int (INTEGER), company_name (VARCHAR)
+   • Purpose: Defines which 75 companies to sample
+   • Created by: Company curation scripts (31_2, 31_4)
+
+4. dim_sec_sections
+   • Columns: sec_item_canonical, hf_section_code, section_name, section_category, priority
+   • Purpose: Maps HF section codes (0-19) to canonical SEC item names (ITEM_1A, ITEM_7, etc.)
+   • Created by: 32_2_SectionName_DimensionCreation.sql
+
+OPTIONAL TABLES (For downstream subsets):
+5. finrag_tgt_comps_21 - For 21-company subsets
+6. finrag_tgt_comps_51 - For 51-company subsets
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                         EXECUTION PARAMETERS                             ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+MODIFY THESE BEFORE RUNNING (Section A):
+- parquet_source_path - Path to sec_filings_large_full.parquet
+- result_save_path - Output directory for sample parquet
+- company_table - Which company filter table to use (default: finrag_tgt_comps_75)
+- sample_size_n - Target sample size (default: 1,000,000)
+- enable_incremental_injection - TRUE to merge external data, FALSE to skip
+
 
 -- ALLOCATION STRATEGY:
 --   Priority 1: Take 100% of bin_2016_2020 (modern era)
@@ -20,7 +64,6 @@
 -- DECISIONS:
 -- Recency bias: 65% of sample from 2016-2020 (user query patterns)
 -- Company filter: Only 700 high-quality companies (S&P 500 + Notable)
-
 -- Random sampling within a company-year could systematically exclude certain sections, creating a biased representation. 
 -- The sampling method risks losing critical information from less frequent sections, potentially skewing our dataset's comprehensiveness.
 
@@ -147,11 +190,29 @@ SET VARIABLE priority_bin = 'bin_2016_2020'; 		-- 100% of latest bins.
 SET VARIABLE older_bin2_weight = 0.60;  				-- 60% to 2010-2015
 SET VARIABLE older_bin1_weight = 0.40;  				-- 40% to 2006-2009
 
+
 SELECT 'VARIABLES SET' as status;
 SELECT 
     getvariable('parquet_source_path') as parquet_path,
     getvariable('sample_size_n') as sample_size,
     getvariable('sample_version') as version;
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- INCREMENTAL DATA INJECTION SETTINGS
+-- Enable to merge external data sources (APIs, partners, additional companies)
+-- If disabled, script runs normal sampling pipeline only
+-- ══════════════════════════════════════════════════════════════════════════
+
+SET VARIABLE enable_incremental_injection = TRUE;  -- Set FALSE to skip injection
+
+SET VARIABLE incremental_data_path = 'D:/JoelDesktop folds_24/NEU FALL2025/MLops IE7374 Project/finrag-insights-mlops/data/exports/10-K_merged_2015_2019_GOOGL_1025.parquet';
+
+SELECT 
+    'Incremental Injection: ' || 
+    CASE WHEN getvariable('enable_incremental_injection') THEN '✓ ENABLED' ELSE '○ DISABLED' END 
+    as injection_status;
+-- ══════════════════════════════════════════════════════════════════════════
+
 
 
 CREATE OR REPLACE TEMP TABLE params AS 
@@ -566,6 +627,388 @@ FROM sample_1m_finrag;
 --#,status,total_rows,n_companies
 --1,FINAL TABLE CREATED WITH COMPLETE SCHEMA,"1,003,534",75
 
+
+
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- SECTION C1b: INCREMENTAL DATA INJECTION (API/External Sources)
+-- Location: After C1 (main sample created), before C2 (validation)
+-- Purpose: Merge additional company data from external sources (APIs, partners) !! 
+-- ══════════════════════════════════════════════════════════════════════════
+
+/*
+ * Step 1: Compares schemas, shows what columns are missing
+ * Step 2: Creates staging_incremental table with proper schema alignment
+ * Step 3: Validates for duplicates before merge
+ * Step 4: MERGE logic using DELETE + INSERT (DuckDB doesn't support MERGE directly)
+ */
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- SECTION C1b: INCREMENTAL DATA INJECTION (CONDITIONAL)
+-- Only executes if enable_incremental_injection = TRUE
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- All queries wrapped in WHERE clause checking the flag
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- C1b 0: STEP 0: Check if injection is enabled
+-- ──────────────────────────────────────────────────────────────────────────
+
+SELECT 
+    '═════════════════════════════════════════' as separator,
+    CASE 
+        WHEN getvariable('enable_incremental_injection') 
+        THEN 'SECTION C1b: INCREMENTAL DATA INJECTION - ACTIVE'
+        ELSE 'SECTION C1b: INCREMENTAL DATA INJECTION - SKIPPED'
+    END as status
+WHERE getvariable('enable_incremental_injection') = TRUE;  
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- C1b 1: STEP 1: Column Comparison (Conditional) (Name-Based Matching, Order-Independent)
+-- ──────────────────────────────────────────────────────────────────────────
+
+
+
+WITH target_columns AS (
+    SELECT 
+        UPPER(TRIM(column_name)) as column_normalized,
+        column_name as target_column
+    FROM information_schema.columns 
+    WHERE table_name = 'sample_1m_finrag'
+),
+source_columns AS (
+    SELECT 
+        UPPER(TRIM(column_name)) as column_normalized,
+        column_name as source_column
+    FROM (DESCRIBE SELECT * FROM read_parquet(getvariable('incremental_data_path')))
+),
+all_columns AS (
+    SELECT column_normalized FROM target_columns
+    UNION
+    SELECT column_normalized FROM source_columns
+)
+SELECT 
+    '📋 SCHEMA COMPARISON' as check,
+    COALESCE(t.target_column, a.column_normalized) as column_name,
+    t.target_column as in_target,
+    s.source_column as in_source,
+    CASE 
+        WHEN t.target_column IS NOT NULL AND s.source_column IS NOT NULL THEN '✅ Both'
+        WHEN t.target_column IS NOT NULL AND s.source_column IS NULL THEN '⚠️ Target only'
+        WHEN t.target_column IS NULL AND s.source_column IS NOT NULL THEN '⚠️ Source only'
+    END as status
+FROM all_columns a
+LEFT JOIN target_columns t ON a.column_normalized = t.column_normalized
+LEFT JOIN source_columns s ON a.column_normalized = s.column_normalized
+WHERE getvariable('enable_incremental_injection') = TRUE
+ORDER BY status, column_name;
+
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- C1b 2: STEP 2: Create Staging Table with Schema Alignment
+-- Maps incremental data to target schema, handles missing columns
+-- ──────────────────────────────────────────────────────────────────────────
+
+
+-- in this data; 
+-- section_name = descriptive text (useless for joins)
+-- section_item = canonical ID (what actually need)
+
+DROP TABLE IF EXISTS staging_incremental;
+
+
+CREATE TEMP TABLE staging_incremental AS
+
+SELECT 
+    -- ═══════════════════════════════════════════════════════════════════
+    -- Generate new sample_id (continues from existing max)
+    -- ═══════════════════════════════════════════════════════════════════
+    (SELECT COALESCE(MAX(sample_id), 0) FROM sample_1m_finrag) + 
+        ROW_NUMBER() OVER (ORDER BY report_year, sentenceID) as sample_id,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- IDENTIFIERS - Direct mapping from source
+    -- ═══════════════════════════════════════════════════════════════════
+    src.cik,
+    src.sentence,
+    src.section_ID,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- SECTION METADATA - Map section_item to section_name + enrich from dim
+    -- ═══════════════════════════════════════════════════════════════════
+    src.section_item as section_name, 
+    
+	dim.section_name as section_desc,      		-- ✅ "Item 1A: Risk Factors"
+	dim.section_category as section_category,  	-- ✅ P1_RISK
+    COALESCE(dim.priority, 'P3') as sec_dim_priority,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- MISSING COLUMNS - Set NULL with proper types
+    -- ═══════════════════════════════════════════════════════════════════
+    CAST(NULL AS STRUCT("1d" INTEGER, "5d" INTEGER, "30d" INTEGER)) as labels,
+    
+    src.filingDate,
+    src.name,
+    src.docID,
+    src.sentenceID,
+    CAST(NULL AS BIGINT) as sentenceCount,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- COMPANY METADATA - Derive for known companies or use placeholder
+    -- ═══════════════════════════════════════════════════════════════════
+    CASE 
+        WHEN UPPER(src.name) LIKE '%ALPHABET%' OR UPPER(src.name) LIKE '%GOOGLE%' 
+        THEN ['GOOGL', 'GOOG']
+        ELSE ['MANUAL_REVIEW_REQ']  -- Placeholder for unknown companies
+    END as tickers,
+    
+    CASE 
+        WHEN UPPER(src.name) LIKE '%ALPHABET%' OR UPPER(src.name) LIKE '%GOOGLE%' 
+        THEN ['NASDAQ']
+        ELSE ['EXCHANGE_UNKNOWN']  -- Placeholder
+    END as exchanges,
+    
+    'operating' as entityType,  -- Safe default for public companies
+    
+    UPPER(COALESCE(src.SIC, src.sic)) as sic,  -- Handle case difference
+    
+    CASE 
+        WHEN UPPER(src.name) LIKE '%ALPHABET%' OR UPPER(src.name) LIKE '%GOOGLE%' 
+        THEN 'DE'  -- Alphabet Inc. incorporated in Delaware
+        ELSE 'XX'  -- ISO placeholder for unknown state/country
+    END as stateOfIncorporation,
+    
+    CASE 
+        WHEN UPPER(src.name) LIKE '%ALPHABET%' OR UPPER(src.name) LIKE '%GOOGLE%' 
+        THEN 2  -- GOOGL and GOOG share classes
+        ELSE 1  -- Default assumption
+    END as tickerCount,
+    
+    -- Approximate acceptanceDateTime from filingDate
+    TRY_CAST(src.filingDate || 'T00:00:00.000Z' AS TIMESTAMP) as acceptanceDateTime,
+    
+    src.form,
+    src.reportDate,
+    
+    -- Returns struct - NULL (stock price data not available)
+    CAST(NULL AS STRUCT("1d" STRUCT(closePriceEndDate DOUBLE, closePriceStartDate DOUBLE, 
+                                     endDate VARCHAR, startDate VARCHAR, ret DOUBLE),
+                        "5d" STRUCT(closePriceEndDate DOUBLE, closePriceStartDate DOUBLE, 
+                                     endDate VARCHAR, startDate VARCHAR, ret DOUBLE),
+                        "30d" STRUCT(closePriceEndDate DOUBLE, closePriceStartDate DOUBLE, 
+                                      endDate VARCHAR, startDate VARCHAR, ret DOUBLE))) as returns,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- DERIVED COLUMNS - Calculate immediately
+    -- ═══════════════════════════════════════════════════════════════════
+    TRY_CAST(src.cik AS INTEGER) as cik_int,
+    src.report_year,
+    src.temporal_bin,  -- Source already has this
+    
+    CAST(NULL AS DOUBLE) as sampling_rate_pct,  -- N/A for injected data
+    
+    LENGTH(src.sentence) as char_count,
+    LENGTH(src.sentence) - LENGTH(REPLACE(src.sentence, ' ', '')) + 1 as word_count_approx,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- AUDIT COLUMNS - Use source values or override
+    -- ═══════════════════════════════════════════════════════════════════
+	COALESCE(CAST(src.sample_created_at AS TIMESTAMP), CURRENT_TIMESTAMP) as sample_created_at,
+	COALESCE(CAST(src.last_modified_date AS TIMESTAMP), CURRENT_TIMESTAMP) as last_modified_date,
+	COALESCE(src.sample_version, 'incremental_v1') as sample_version,
+	COALESCE(src.source_file_path, getvariable('incremental_data_path')) as source_file_path,
+    
+    'incremental_inject' as load_method,  -- Override to track injection
+    'staged' as record_status,
+    
+    MD5(src.sentenceID || src.sentence) as row_hash,
+    
+    -- ═══════════════════════════════════════════════════════════════════
+    -- FEATURE FLAGS - Will be populated by Section D
+    -- ═══════════════════════════════════════════════════════════════════
+    
+FROM read_parquet(getvariable('incremental_data_path')) src
+LEFT JOIN sampler.main.dim_sec_sections dim
+    ON TRIM(UPPER(src.section_item)) = TRIM(UPPER(dim.sec_item_canonical))  
+    
+    -- Join on canonical section name
+WHERE getvariable('enable_incremental_injection') = TRUE;
+
+
+-- SELECT * FROM read_parquet(getvariable('incremental_data_path')) src;
+
+
+SELECT 
+    '✓ STAGING TABLE CREATED' as status,
+    COUNT(*) as rows_staged,
+    COUNT(DISTINCT cik) as companies_staged,
+    MIN(report_year) as year_min,
+    MAX(report_year) as year_max,
+    COUNT(DISTINCT section_name) as sections_present
+FROM staging_incremental
+WHERE getvariable('enable_incremental_injection') = TRUE;
+
+
+
+
+
+
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- C1b 3: STEP 3: Validation
+-- ──────────────────────────────────────────────────────────────────────────
+
+WITH duplicate_check AS (
+    SELECT 
+        sentenceID,
+        COUNT(*) as n_occurrences
+    FROM (
+        SELECT sentenceID FROM sample_1m_finrag
+        UNION ALL
+        SELECT sentenceID FROM staging_incremental
+    )
+    GROUP BY sentenceID
+    HAVING COUNT(*) > 1
+)
+SELECT 
+    '🔍 DUPLICATE CHECK' as validation,
+    COUNT(*) as n_duplicate_sentenceIDs,
+    CASE 
+        WHEN COUNT(*) = 0 THEN '✅ No duplicates - safe to merge'
+        ELSE '⚠️ ' || CAST(COUNT(*) AS VARCHAR) || ' duplicates found - MERGE will update'
+    END as status
+FROM duplicate_check
+WHERE getvariable('enable_incremental_injection') = TRUE;  -- Conditional check
+
+
+
+-- Validation: Schema Alignment Check (Staging vs Target)
+
+WITH target_columns AS (
+    SELECT 
+        UPPER(TRIM(column_name)) as column_normalized,
+        column_name as target_column,
+        data_type as target_type
+    FROM information_schema.columns 
+    WHERE table_name = 'sample_1m_finrag'
+),
+staging_columns AS (
+    SELECT 
+        UPPER(TRIM(column_name)) as column_normalized,
+        column_name as staging_column,
+        data_type as staging_type
+    FROM information_schema.columns
+    WHERE table_name = 'staging_incremental'
+),
+all_columns AS (
+    SELECT column_normalized FROM target_columns
+    UNION
+    SELECT column_normalized FROM staging_columns
+)
+SELECT 
+    '🔍 STAGING ALIGNMENT CHECK' as validation,
+    COALESCE(t.target_column, a.column_normalized) as column_name,
+    t.target_column as in_target,
+    s.staging_column as in_staging,
+    t.target_type as target_type,
+    s.staging_type as staging_type,
+    CASE 
+        WHEN t.target_column IS NOT NULL AND s.staging_column IS NOT NULL THEN '✅ Aligned'
+        WHEN t.target_column IS NOT NULL AND s.staging_column IS NULL THEN '❌ Missing in staging'
+        WHEN t.target_column IS NULL AND s.staging_column IS NOT NULL THEN '❌ Extra in staging'
+    END as alignment_status
+FROM all_columns a
+LEFT JOIN target_columns t ON a.column_normalized = t.column_normalized
+LEFT JOIN staging_columns s ON a.column_normalized = s.column_normalized
+WHERE getvariable('enable_incremental_injection') = TRUE
+ORDER BY alignment_status, column_name;
+
+
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- C1b 4: STEP 4: MERGE  MERGE - Upsert Staging Data into Main Table
+-- DELETE duplicates → INSERT all staged rows
+-- C1b 5: Logging (Conditional)
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- Count before merge (for logging)
+SET VARIABLE rows_before_merge = (SELECT COUNT(*) FROM sample_1m_finrag);
+
+-- Delete any existing rows with matching sentenceIDs (prepare for upsert)
+DELETE FROM sample_1m_finrag
+WHERE sentenceID IN (SELECT sentenceID FROM staging_incremental)
+  AND getvariable('enable_incremental_injection') = TRUE;
+
+-- Insert all staged rows
+INSERT INTO sample_1m_finrag
+SELECT * FROM staging_incremental
+WHERE getvariable('enable_incremental_injection') = TRUE;
+
+-- Update record_status to mark successful injection
+UPDATE sample_1m_finrag
+SET record_status = 'injected'
+WHERE load_method = 'incremental_inject'
+  AND getvariable('enable_incremental_injection') = TRUE;
+
+
+
+INSERT INTO execution_log 
+	SELECT 
+	    9, 
+	    'INCREMENTAL_INJECTION', 
+	    'COMPLETE', 
+	    COUNT(*),
+	    'Injected ' || COUNT(*) || ' rows from external source (' || 
+	    COUNT(DISTINCT cik) || ' companies, ' || 
+	    (MAX(report_year) - MIN(report_year) + 1) || ' years)',
+	    CURRENT_TIMESTAMP
+	FROM staging_incremental
+	WHERE getvariable('enable_incremental_injection') = TRUE;
+	
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- Post-Merge Validation
+-- ──────────────────────────────────────────────────────────────────────────
+
+SELECT 
+    '✓✓ INJECTION COMPLETE' as status,
+    getvariable('rows_before_merge') as rows_before,
+    COUNT(*) as rows_after,
+    COUNT(*) - getvariable('rows_before_merge') as rows_added,
+    SUM(CASE WHEN load_method = 'incremental_inject' THEN 1 ELSE 0 END) as injected_rows,
+    COUNT(DISTINCT cik_int) as total_companies,
+    COUNT(DISTINCT CASE WHEN load_method = 'incremental_inject' THEN cik_int END) as injected_companies
+FROM sample_1m_finrag
+WHERE getvariable('enable_incremental_injection') = TRUE;
+
+
+--#,status,rows_before,rows_after,rows_added,injected_rows,total_companies,injected_companies
+--1,✓✓ INJECTION COMPLETE,"1,003,534","1,012,044","8,510","8,510",76,1
+
+
+SELECT 
+    '═════════════════════════════════════════' as separator,
+    'SECTION C1b COMPLETE - Proceeding to C2 Validation...' as next_step
+WHERE getvariable('enable_incremental_injection') = TRUE;
+
+DROP TABLE IF EXISTS staging_incremental;
+
+
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- END OF STEP C1 !
+-- ──────────────────────────────────────────────────────────────────────────
+
+
+
+
 -- ──────────────────────────────────────────────────────────────────────────
 -- STEP C2: Validation of join-back completeness
 -- ──────────────────────────────────────────────────────────────────────────
@@ -906,5 +1349,29 @@ ORDER BY step_number;
 	Step 9: SCHEMA_VALIDATION - Join successful ✓
 	Step 10: FEATURE_ENGINEERING - 48 columns (37 original + 4 dimension + 7 derived) ✓
 	Step 11: EXPORT_PARQUET - 654,096 rows exported ✓
+ */
+
+
+/*
+ * POST INJECTION - GOOGLE. RUN 3.
+ * 
+ * 
+
+#,step_number,step_name,status,row_count,message,execution_time,step_duration
+1,0,INITIALIZATION,STARTED,[NULL],Stratified sampling procedure initiated,2025-10-26 00:14:56.902,[NULL]
+2,1,PARAMETERS,COMPLETE,1,"Sample size: 1000000, Companies: 75",2025-10-26 00:14:56.912,00:00:00.010568
+3,2,CORPUS_LOAD,COMPLETE,"1,952,705",Loaded 75 companies,2025-10-26 00:14:59.687,00:00:02.774846
+4,3,BIN_POPULATIONS,COMPLETE,3,Calculated populations for 3 temporal bins,2025-10-26 00:14:59.779,00:00:00.092461
+5,4,PIVOT_POPULATIONS,COMPLETE,1,Modern bin: 654096 sentences,2025-10-26 00:14:59.782,00:00:00.002482
+6,5,ALLOCATION_STRATEGY,COMPLETE,1,"Mode: MODERN_FULL_PLUS_OLDER, Modern: 654096",2025-10-26 00:14:59.784,00:00:00.002234
+7,6,BIN_ALLOCATIONS,COMPLETE,3,Allocations prepared for 3 bins,2025-10-26 00:14:59.787,00:00:00.002942
+8,7,SAMPLING_EXECUTION,COMPLETE,"1,003,534",Sampled 1003534 sentenceIDs across 3 bins,2025-10-26 00:15:00.576,00:00:00.78895
+9,8,SCHEMA_RETRIEVAL,COMPLETE,"1,003,534",Retrieved complete schema (37 columns) for 1003534 sentences,2025-10-26 00:15:33.260,00:00:32.684272
+10,9,INCREMENTAL_INJECTION,COMPLETE,"8,510","Injected 8510 rows from external source (1 companies, 5 years)",2025-10-26 00:15:33.896,00:00:00.6354
+11,9,SCHEMA_VALIDATION,COMPLETE,[NULL],Join-back successful - all columns retrieved,2025-10-26 00:15:33.996,00:00:00.100272
+12,10,FEATURE_ENGINEERING,COMPLETE,48,Added 12 derived flags with word boundaries,2025-10-26 00:15:35.320,00:00:01.324412
+13,11,EXPORT_PARQUET,COMPLETE,"1,012,044",Exported to: D:/JoelDesktop folds_24/NEU FALL2025/MLops IE7374 Project/finrag-insights-mlops/data/exports/sec_finrag_1M_sample.parquet,2025-10-26 00:15:38.375,00:00:03.054533
+
+
  */
 

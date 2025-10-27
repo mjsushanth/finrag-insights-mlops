@@ -1,4 +1,7 @@
-/* --------------------------------------------------------------------------------------------------------------------
+/* 
+ * Study Related - RCA notepad based on many issues faced. Esp with dynamic DDL / parameterization.
+ * 
+ * --------------------------------------------------------------------------------------------------------------------
 Layer 1: Client-Side Preprocessing (DBeaver, psql, etc.)
 What happens: Client tool does string substitution BEFORE sending SQL to database
 
